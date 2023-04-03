@@ -13,12 +13,10 @@ ElevenLabsData[] = {
         Enclose @ With[{params = Lookup[{##2}, "Parameters", {}]},
             URLExecute @ HTTPRequest[
                 #1,
-                MapAt[
-                    Append["xi-api-key" -> Confirm @ Lookup[params, "key"]],
-                    KeyMap[Replace["BodyData" -> "Body"]] @
-                        Association @ FilterRules[{##2}, Except["Parameters"]],
-                    "Headers"
-                ]
+                Association @ FilterRules[{##2}, Except["Parameters"]] //
+                    MapAt[Append["xi-api-key" -> Confirm @ Lookup[params, "key"]], "Headers"] //
+                    KeyMap[Replace["BodyData" -> "Body"]] //
+                    MapAt[DeleteCases[None], "Body"]
             ]
         ]
     ] ,
@@ -32,9 +30,9 @@ ElevenLabsData[] = {
         KeyValuePattern[{"key" -> _String}]
     ],
     "RawGets" -> {"RawVoices", "RawVoice", "RawVoiceSettings"},
-    "RawPosts" -> {"RawTextToSpeech", "RawTextToSpeechStream"},
+    "RawPosts" -> {"RawTextToSpeech", "RawTextToSpeechStream", "RawVoiceAdd", "RawVoiceEdit"},
     "Gets" -> {"Voices", "Voice", "VoiceSettings"},
-    "Posts" -> {"TextToSpeech", "TextToSpeechStream"},
+    "Posts" -> {"TextToSpeech", "TextToSpeechStream", "VoiceAdd", "VoiceEdit"},
     "Information" -> "ElevenLabs connection for WolframLanguage"
 }
 
@@ -71,13 +69,60 @@ ElevenLabsData["RawVoiceSettings"] := {
     "RequiredParameters"-> {"VoiceID"}
 }
 
+ElevenLabsData["RawVoiceAdd"] := {
+    "URL"				-> "https://api.elevenlabs.io/v1/voices/add",
+    "BodyData"		    -> {"ParameterlessBodyData" -> "Data"},
+    "HTTPSMethod"		-> "POST",
+    "Headers"			-> {"Content-Type" -> "multipart/form-data"},
+    "Parameters"		-> {"Data"},
+    "RequiredParameters"-> {"Data"}
+}
+
+ElevenLabsData["RawVoiceEdit"] := {
+    "URL"				-> (URLBuild[{"https://api.elevenlabs.io/v1/voices", #1, "edit"}] &),
+    "BodyData"		    -> {"ParameterlessBodyData" -> "Data"},
+    "HTTPSMethod"		-> "POST",
+    "Headers"			-> {"Content-Type" -> "multipart/form-data"},
+    "PathParameters"	-> {"VoiceID"},
+    "Parameters"		-> {"Data"},
+    "RequiredParameters"-> {"VoiceID", "Data"}
+}
+
 ElevenLabsCookedData["Voices", id_, OptionsPattern[]] :=
     importJson[KeyClient`rawkeydata[id, "RawVoices"]]["voices", Association,
-        #name -> <|"VoiceID" -> #["voice_id"], "Audio" -> Audio[Import[#["preview_url"]], Appearance -> "Minimal"]|> &
+        #name -> <|
+            "VoiceID" -> #["voice_id"],
+            "Audio" -> Enclose[Audio[ConfirmBy[Import[ConfirmBy[#["preview_url"], StringQ]], AudioQ], Appearance -> "Minimal"], Missing[] &]
+        |> &
     ]
 
-ElevenLabsCookedData["Voice", id_, opts : OptionsPattern[]] :=
-    importJson[KeyClient`rawkeydata[id, "RawVoice", opts]][<|"VoiceID" -> #["voice_id"], "Name" -> #name, "Audio" -> Audio[Import[#["preview_url"]], Appearance -> "Minimal"]|> &]
+ElevenLabsCookedData["Voice", id_, opts : OptionsPattern[]] := importJson[KeyClient`rawkeydata[id, "RawVoice", opts]][
+    <|
+        "VoiceID" -> #["voice_id"],
+        "Name" -> #name,
+        "Audio" -> Enclose[Audio[ConfirmBy[Import[ConfirmBy[#["preview_url"], StringQ]], AudioQ], Appearance -> "Minimal"], Missing[] &]
+    |> &]
+
+ElevenLabsCookedData["VoiceAdd", id_, opts : OptionsPattern[]] := Enclose @ importJson[
+    KeyClient`rawkeydata[id, "RawVoiceAdd", {
+        "Data" -> <|
+            "name" -> ConfirmBy[Lookup[Flatten[{opts}], "Name"], StringQ],
+            "files" -> Replace[ConfirmMatch[Lookup[Flatten[{opts}], "Files"], {__ ? FileExistsQ}], fileName_String :> File[fileName], {1}],
+            "labels" -> ConfirmMatch[Lookup[Flatten[{opts}], "Labels", None], _String | None]
+        |>
+    }]
+]
+
+ElevenLabsCookedData["VoiceEdit", id_, opts : OptionsPattern[]] := Enclose @ importJson[
+    KeyClient`rawkeydata[id, "RawVoiceEdit", {
+        "VoiceID" -> ConfirmBy[Lookup[Flatten[{opts}], "VoiceID"], StringQ],
+        "Data" -> <|
+            "name" -> ConfirmBy[Lookup[Flatten[{opts}], "Name"], StringQ],
+            "files" -> ConfirmMatch[File /@ Lookup[Flatten[{opts}], "Files", {}], {___ ? FileExistsQ}],
+            "labels" -> ConfirmMatch[Lookup[Flatten[{opts}], "Labels", None], _String | None]
+        |>
+    }]
+]
 
 ElevenLabsData["RawTextToSpeech"] := {
     "URL"				-> (URLBuild[{"https://api.elevenlabs.io/v1/text-to-speech", #1}] &),
