@@ -30,7 +30,7 @@ ElevenLabsData[] = {
         KeyValuePattern[{"key" -> _String}]
     ],
     "RawGets" -> {"RawVoices", "RawVoice", "RawVoiceSettings"},
-    "RawPosts" -> {"RawTextToSpeech", "RawTextToSpeechStream", "RawVoiceAdd", "RawVoiceEdit"},
+    "RawPosts" -> {"RawTextToSpeech", "RawTextToSpeechStream", "RawVoiceAdd", "RawVoiceEdit", "RawVoiceDelete"},
     "Gets" -> {"Voices", "Voice", "VoiceSettings"},
     "Posts" -> {"TextToSpeech", "TextToSpeechStream", "VoiceAdd", "VoiceEdit"},
     "Information" -> "ElevenLabs connection for WolframLanguage"
@@ -86,6 +86,14 @@ ElevenLabsData["RawVoiceEdit"] := {
     "PathParameters"	-> {"VoiceID"},
     "Parameters"		-> {"Data"},
     "RequiredParameters"-> {"VoiceID", "Data"}
+}
+
+ElevenLabsData["RawVoiceDelete"] := {
+    "URL"				-> (URLBuild[{"https://api.elevenlabs.io/v1/voices", #1}] &),
+    "HTTPSMethod"		-> "DELETE",
+    "Headers"			-> {"Content-Type" -> "application/json"},
+    "PathParameters"	-> {"VoiceID"},
+    "RequiredParameters"-> {"VoiceID"}
 }
 
 ElevenLabsCookedData["Voices", id_, OptionsPattern[]] :=
