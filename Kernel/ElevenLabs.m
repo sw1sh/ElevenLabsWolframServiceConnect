@@ -100,7 +100,7 @@ ElevenLabsCookedData["Voices", id_, OptionsPattern[]] :=
     importJson[KeyClient`rawkeydata[id, "RawVoices"]]["voices", Association,
         #name -> <|
             "VoiceID" -> #["voice_id"],
-            "Audio" -> Enclose[Audio[ConfirmBy[Import[ConfirmBy[#["preview_url"], StringQ]], AudioQ], Appearance -> "Minimal"], Missing[] &]
+            "Audio" -> Enclose[ConfirmBy[Audio[ConfirmBy[#["preview_url"], StringQ], Appearance -> "Minimal"], AudioQ], Missing[] &]
         |> &
     ]
 
@@ -108,7 +108,7 @@ ElevenLabsCookedData["Voice", id_, opts : OptionsPattern[]] := importJson[KeyCli
     <|
         "VoiceID" -> #["voice_id"],
         "Name" -> #name,
-        "Audio" -> Enclose[Audio[ConfirmBy[Import[ConfirmBy[#["preview_url"], StringQ]], AudioQ], Appearance -> "Minimal"], Missing[] &]
+        "Audio" -> Enclose[ConfirmBy[Audio[ConfirmBy[#["preview_url"], StringQ], Appearance -> "Minimal"], AudioQ], Missing[] &]
     |> &]
 
 ElevenLabsCookedData["VoiceAdd", id_, opts : OptionsPattern[]] := Enclose @ importJson[
