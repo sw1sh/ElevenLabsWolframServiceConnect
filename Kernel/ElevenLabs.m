@@ -1,3 +1,5 @@
+Get["ElevenLabsFunctions.m"]
+
 Begin["Wolfram`ElevenLabsAPI`"] (* Begin Private Context *)
 
 
@@ -10,13 +12,26 @@ Begin["`Private`"](* Begin Private Context *)
 ElevenLabsData[] = {
     "ServiceName" -> "ElevenLabs",
     "URLFetchFun" :> Function[
-        Enclose @ With[{params = Lookup[{##2}, "Parameters", {}]},
-            URLExecute @ HTTPRequest[
-                #1,
-                Association @ FilterRules[{##2}, Except["Parameters"]] //
+        Enclose @ With[{url = #1, params = Lookup[{##2}, "Parameters", {}]},
+            Association @ FilterRules[{##2}, Except["Parameters" | "AudioStream"]] //
                     MapAt[Append["xi-api-key" -> Confirm @ Lookup[params, "key"]], "Headers"] //
                     KeyMap[Replace["BodyData" -> "Body"]] //
-                    MapAt[DeleteCases[None], "Body"]
+                    MapAt[DeleteCases[None], "Body"] //
+            If[ Lookup[params, "AudioStream", False],
+                Block[{path, format, localObject},
+                    {path, format, localObject} = Video`Utilities`ValidateGeneratedAssetLocation[
+                        {AudioStream, Audio`AudioPlaybackDump`AudioStreamHiddenOptions},
+                        AudioStream,
+                        False,
+                        Audio`$ImportAudioFileFormats,
+                        "DefaultFormat" -> "Ogg",
+                        "AllowNone" -> True,
+                        "BaseDirectory" -> Audio`AudioPlaybackDump`$WolframAudioFolder
+                    ];
+                    URLDownloadSubmit[HTTPRequest[url, MapAt[Append["Accept" -> "audio/ogg"], #, "Headers"]], path];
+                    AudioPlay[AudioStreamFromFile[path]]
+                ] &,
+                URLExecute[HTTPRequest[url, #]] &
             ]
         ]
     ] ,
@@ -36,7 +51,7 @@ ElevenLabsData[] = {
     "Information" -> "ElevenLabs connection for WolframLanguage"
 }
 
-$ElevenLabslogo = ImageResize[RemoveBackground @ Import["https://pbs.twimg.com/profile_images/1590865996532912131/Tkgaw9L1_400x400.jpg"], 24]
+$ElevenLabslogo = ImageResize[RemoveBackground @ Import[PacletObject["ServiceConnection_ElevenLabs"]["AssetLocation", "logo"]], 24]
 ElevenLabsData["icon"] := $ElevenLabslogo
 
 
@@ -115,7 +130,10 @@ ElevenLabsCookedData["VoiceAdd", id_, opts : OptionsPattern[]] := Enclose @ impo
     KeyClient`rawkeydata[id, "RawVoiceAdd", {
         "Data" -> <|
             "name" -> ConfirmBy[Lookup[Flatten[{opts}], "Name"], StringQ],
-            "files" -> Replace[ConfirmMatch[Lookup[Flatten[{opts}], "Files"], {__ ? FileExistsQ}], fileName_String :> File[fileName], {1}],
+            "files" -> Join[
+                Replace[ConfirmMatch[Lookup[Flatten[{opts}], "Files"], {__ ? FileExistsQ}], fileName_String :> File[fileName], {1}],
+                Replace[ConfirmMatch[Lookup[Flatten[{opts}], "Audios"], {__ ? AudioQ}], audio_Audio :> File[Export[CreateFile[], audio, "OGG"]], {1}]
+            ],
             "labels" -> ConfirmMatch[Lookup[Flatten[{opts}], "Labels", None], _String | None]
         |>
     }]
@@ -148,30 +166,26 @@ ElevenLabsData["RawTextToSpeechStream"] := {
     "HTTPSMethod"		-> "POST",
     "Headers"			-> {"Content-Type" -> "application/json"},
     "PathParameters"	-> {"VoiceID"},
-    "Parameters"		-> {"Data"},
+    "Parameters"		-> {"Data", "AudioStream"},
     "RequiredParameters"-> {"VoiceID", "Data"}
 }
 
-ElevenLabsCookedData["TextToSpeech", id_, opts : OptionsPattern[]] := Enclose @ KeyClient`rawkeydata[id, "RawTextToSpeech", {
-    "VoiceID" -> Confirm @ Lookup[Flatten[{opts}], "VoiceID"],
+ElevenLabsCookedData[request : "TextToSpeech" | "TextToSpeechStream", id_, opts : OptionsPattern[]] :=
+Enclose @ KeyClient`rawkeydata[id, "Raw" <> request, {
+    "VoiceID" -> ConfirmBy[
+        Lookup[Flatten[{opts}], "VoiceID",
+            ElevenLabsCookedData["Voices", id][Lookup[Flatten[{opts}], "Voice", "Elli"]]["VoiceID"]
+        ],
+        StringQ
+    ],
     "Data" -> Developer`WriteRawJSONString @ <|
         "text" -> Confirm @ Lookup[Flatten[{opts}], "Text"],
         "voice_settings" -> <|
-            "stability" -> Confirm @ Lookup[Flatten[{opts}], "Stability", 0],
-            "similarity_boost" -> Confirm @ Lookup[Flatten[{opts}], "SimilarityBoost", 0]
+            "stability" -> ConfirmBy[Lookup[Flatten[{opts}], "Stability", 0], Between[{0, 1}]],
+            "similarity_boost" -> ConfirmBy[Lookup[Flatten[{opts}], "SimilarityBoost", 0], Between[{0, 1}]]
         |>
-    |>
-}]
-
-ElevenLabsCookedData["TextToSpeechStream", id_, opts : OptionsPattern[]] := Enclose @ KeyClient`rawkeydata[id, "RawTextToSpeechStream", {
-    "VoiceID" -> Confirm @ Lookup[Flatten[{opts}], "VoiceID"],
-    "Data" -> Developer`WriteRawJSONString @ <|
-        "text" -> Confirm @ Lookup[Flatten[{opts}], "Text"],
-        "voice_settings" -> <|
-            "stability" -> Confirm @ Lookup[Flatten[{opts}], "Stability", 0],
-            "similarity_boost" -> Confirm @ Lookup[Flatten[{opts}], "SimilarityBoost", 0]
-        |>
-    |>
+    |>,
+    "AudioStream" -> request === "TextToSpeechStream"
 }]
 
 
@@ -186,7 +200,7 @@ End[]
 
 SetAttributes[{}, {ReadProtected, Protected}]
 
-(* Return three functions to define data, cookedData, sendDessage  *)
+(* Return three functions to define Data, CookedData, SendMessage  *)
 
 {
     Wolfram`ElevenLabsAPI`Private`ElevenLabsData,
